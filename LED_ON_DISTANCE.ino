@@ -132,7 +132,7 @@ void setup() {
   peopleOnStairs = 0;
   enteredFromTop = false;
   enteredFromBottom = false;
-
+  turnLedOffTop();
   
 //TOF
   Serial.begin(115200);
@@ -170,7 +170,7 @@ void setup() {
   pixels.clear();
 }
 
-void turnLedOn()
+void turnLedOnTop()
   {   
     for(int i=0; i<NUMPIXELS; i++) 
       {
@@ -180,7 +180,27 @@ void turnLedOn()
       }
   }
 
-void turnLedOff()
+void turnLedOnBottom()
+  {   
+    for(int i=NUMPIXELS-1; i>=0; i--) 
+      {
+        pixels.setPixelColor(i, pixels.Color(0, 180, 0));
+        pixels.show();   // Send the updated pixel colors to the hardware.
+        delay(DELAYVAL); // Pause before next pass through loop
+      }
+  }
+
+void turnLedOffTop()
+{
+  for(int i=0; i<NUMPIXELS; i++) 
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+      pixels.show();   // Send the updated pixel colors to the hardware.
+      delay(DELAYVAL); // Pause before next pass through loop
+    }
+}
+
+void turnLedOffBottom()
 {
   for(int i=NUMPIXELS-1; i>=0; i--) 
     {
@@ -192,6 +212,7 @@ void turnLedOff()
 
 bool sensorTop() //1 is Top, 2 is Bottom
 {
+  read_dual_sensors();
   if(distance < 1000)
     return true;
   else
@@ -200,6 +221,7 @@ bool sensorTop() //1 is Top, 2 is Bottom
 
 bool sensorBottom() //1 is Top, 2 is Bottom
 {
+  read_dual_sensors();
   if(distance2 < 1000)
     return true;
   else
@@ -223,76 +245,132 @@ void loop() {
   if (SerialBT.available()) {
     Serial.write(SerialBT.read());
   }
-  //Serial.println();
-  read_dual_sensors();
   
-  float dzielenie = (distance - MINDIST - 20) / (MAXDIST - MINDIST);
-  distance_in_pixels = dzielenie * (NUMPIXELS);
-  if (distance_in_pixels > NUMPIXELS){
-    distance_in_pixels = NUMPIXELS;
-  } else if (distance_in_pixels <0){
-    distance_in_pixels = 0;
-  }
+//  
+//    if(ON_STAIRS)
+//    {
+//      Serial.println("ON_STAIRS True");
+//    }
+//  else
+//    {
+//      Serial.println("ON_STAIRS False");
+//    };
+//  
+//  Serial.print("peopleOnStairs ");
+//  Serial.println(peopleOnStairs);
+//  
+//if(enteredFromTop)
+//    {
+//      Serial.println("enteredFromTop True");
+//    }
+//  else
+//    {
+//      Serial.println("enteredFromTop False");
+//    };
+//  
+//  if(enteredFromBottom)
+//    {
+//      Serial.println("enteredFromBottom True");
+//    }
+//  else
+//    {
+//      Serial.println("enteredFromBottom False");
+//    };
+//
+//  if(sensorTop())
+//    {
+//      Serial.println("sensorTop True");
+//    }
+//  else
+//    {
+//      Serial.println("sensorTop False");
+//    };
+//  if(sensorBottom())
+//    {
+//      Serial.println("sensorBottom True");
+//    }
+//  else
+//    {
+//      Serial.println("sensorBottom False");
+//    };
+//  Serial.println();
   
-  newPixels = distance_in_pixels;
+  
+//  float dzielenie = (distance - MINDIST - 20) / (MAXDIST - MINDIST);
+//  distance_in_pixels = dzielenie * (NUMPIXELS);
+//  if (distance_in_pixels > NUMPIXELS){
+//    distance_in_pixels = NUMPIXELS;
+//  } else if (distance_in_pixels <0){
+//    distance_in_pixels = 0;
+//  }
+//  
+//  newPixels = distance_in_pixels;
  
   
 
   //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
-  if(sensorTop && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od gory
+  if(sensorTop() && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od gory
     {
-      turnLedOn();
+      turnLedOnTop();
       ON_STAIRS = true;
       enteredFromTop = true;
       peopleOnStairs++;
       timeMarker = millis();
+      Serial.println("===1===");
     }
-  else if(sensorTop  && ON_STAIRS && enteredFromTop) //dodaj liczbe osob jak wchodzi od gory i zaczal od gory
+  else if(sensorTop()  && ON_STAIRS && enteredFromTop) //dodaj liczbe osob jak wchodzi od gory i zaczal od gory
     {
+      Serial.println("===2===");
       peopleOnStairs++;    
     }
-  else if(sensorBottom && ON_STAIRS && enteredFromTop && peopleOnStairs > 1) //odejmij liczbe osob jak wyszedl z dolu i zaczal od gory i na schodach byla wiecej niz 1 osoba
+  else if(sensorBottom() && ON_STAIRS && enteredFromTop && peopleOnStairs > 1) //odejmij liczbe osob jak wyszedl z dolu i zaczal od gory i na schodach byla wiecej niz 1 osoba
     {
       peopleOnStairs--;
+      Serial.println("===3===");
     }
-  else if(sensorBottom && ON_STAIRS && enteredFromTop && peopleOnStairs == 1) //jesli wyszedl z dolu, byl ktos na schodach, zaczal od gory i tylko 1 os byla na schodach to LED off
+  else if(sensorBottom() && ON_STAIRS && enteredFromTop && peopleOnStairs == 1) //jesli wyszedl z dolu, byl ktos na schodach, zaczal od gory i tylko 1 os byla na schodach to LED off
     {
-      turnLedOff();
+      turnLedOffTop();
       ON_STAIRS = false;
       enteredFromTop = false;
       peopleOnStairs = 0;
+      Serial.println("===4===");
     }
 
    //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od dolu
-   else if(sensorBottom && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od dolu
+   else if(sensorBottom() && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od dolu
     {
-      turnLedOn();
+      turnLedOnBottom();
       ON_STAIRS = true;
       enteredFromBottom = true;
       peopleOnStairs++;
       timeMarker = millis();
+      Serial.println("===5===");
     }
-  else if(sensorBottom  && ON_STAIRS && enteredFromBottom) //dodaj liczbe osob jak wchodzi od dolu i zaczal od dolu
+  else if(sensorBottom()  && ON_STAIRS && enteredFromBottom) //dodaj liczbe osob jak wchodzi od dolu i zaczal od dolu
     {
-      peopleOnStairs++;    
+      peopleOnStairs++;   
+      Serial.println("===6==="); 
     }
-  else if(sensorTop && ON_STAIRS && enteredFromBottom && peopleOnStairs > 1) //odejmij liczbe osob jak wyszedl z gory i zaczal od dolu i na schodach byla wiecej niz 1 osoba
+  else if(sensorTop() && ON_STAIRS && enteredFromBottom && peopleOnStairs > 1) //odejmij liczbe osob jak wyszedl z gory i zaczal od dolu i na schodach byla wiecej niz 1 osoba
     {
       peopleOnStairs--;
+      Serial.println("===7===");
     }
-  else if(sensorTop && ON_STAIRS && enteredFromBottom && peopleOnStairs == 1) //jesli wyszedl z gory, byl ktos na schodach, zaczal od dolu i tylko 1 os byla na schodach to LED off
+  else if(sensorTop() && ON_STAIRS && enteredFromBottom && peopleOnStairs == 1) //jesli wyszedl z gory, byl ktos na schodach, zaczal od dolu i tylko 1 os byla na schodach to LED off
     {
-      turnLedOff();
+      turnLedOffBottom();
       ON_STAIRS = false;
       enteredFromBottom = false;
       peopleOnStairs = 0;
+      Serial.println("===8===");
     }
 
   //wylaczanie LED after timeout ( 60 sekund )
-  if(timeout())
-    {
-      turnLedOff();
-    }
+//  if(timeout())
+//    {
+//      turnLedOff();
+//    }
 
     
   
@@ -314,6 +392,8 @@ void loop() {
 
     prevPixels = distance_in_pixels;
   */
+  
 
+  delay(50);
   
 }
