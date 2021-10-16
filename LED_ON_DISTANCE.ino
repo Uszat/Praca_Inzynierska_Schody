@@ -127,7 +127,7 @@ void read_dual_sensors() {
 
 void setup() {
 
-  //GENERAL IDEA
+//GENERAL IDEA
   ON_STAIRS = false;
   peopleOnStairs = 0;
   enteredFromTop = false;
@@ -156,9 +156,9 @@ void setup() {
   setID();
  
 
- //LED 
+//LED 
  
- // These lines are specifically to support the Adafruit Trinket 5V 16 MHz.
+  // These lines are specifically to support the Adafruit Trinket 5V 16 MHz.
   // Any other board, you can remove this part (but no harm leaving it):
 #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
   clock_prescale_set(clock_div_1);
@@ -245,7 +245,9 @@ void loop() {
   if (SerialBT.available()) {
     Serial.write(SerialBT.read());
   }
-  
+
+//  Serial.print("peopleOnStairs ");
+//  Serial.println(peopleOnStairs);
 //  
 //    if(ON_STAIRS)
 //    {
@@ -255,9 +257,6 @@ void loop() {
 //    {
 //      Serial.println("ON_STAIRS False");
 //    };
-//  
-//  Serial.print("peopleOnStairs ");
-//  Serial.println(peopleOnStairs);
 //  
 //if(enteredFromTop)
 //    {
@@ -295,18 +294,6 @@ void loop() {
 //    };
 //  Serial.println();
   
-  
-//  float dzielenie = (distance - MINDIST - 20) / (MAXDIST - MINDIST);
-//  distance_in_pixels = dzielenie * (NUMPIXELS);
-//  if (distance_in_pixels > NUMPIXELS){
-//    distance_in_pixels = NUMPIXELS;
-//  } else if (distance_in_pixels <0){
-//    distance_in_pixels = 0;
-//  }
-//  
-//  newPixels = distance_in_pixels;
- 
-  
 
   //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
   if(sensorTop() && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od gory
@@ -321,12 +308,14 @@ void loop() {
   else if(sensorTop()  && ON_STAIRS && enteredFromTop) //dodaj liczbe osob jak wchodzi od gory i zaczal od gory
     {
       Serial.println("===2===");
-      peopleOnStairs++;    
+      peopleOnStairs++;
+      delay(100);    
     }
   else if(sensorBottom() && ON_STAIRS && enteredFromTop && peopleOnStairs > 1) //odejmij liczbe osob jak wyszedl z dolu i zaczal od gory i na schodach byla wiecej niz 1 osoba
     {
       peopleOnStairs--;
       Serial.println("===3===");
+      delay(100);
     }
   else if(sensorBottom() && ON_STAIRS && enteredFromTop && peopleOnStairs == 1) //jesli wyszedl z dolu, byl ktos na schodach, zaczal od gory i tylko 1 os byla na schodach to LED off
     {
@@ -350,11 +339,13 @@ void loop() {
   else if(sensorBottom()  && ON_STAIRS && enteredFromBottom) //dodaj liczbe osob jak wchodzi od dolu i zaczal od dolu
     {
       peopleOnStairs++;   
+      delay(100);
       Serial.println("===6==="); 
     }
   else if(sensorTop() && ON_STAIRS && enteredFromBottom && peopleOnStairs > 1) //odejmij liczbe osob jak wyszedl z gory i zaczal od dolu i na schodach byla wiecej niz 1 osoba
     {
       peopleOnStairs--;
+      delay(100);
       Serial.println("===7===");
     }
   else if(sensorTop() && ON_STAIRS && enteredFromBottom && peopleOnStairs == 1) //jesli wyszedl z gory, byl ktos na schodach, zaczal od dolu i tylko 1 os byla na schodach to LED off
@@ -372,10 +363,19 @@ void loop() {
 //      turnLedOff();
 //    }
 
+ delay(10);
     
-  
-  
-  /* //Czujnik oddalania i przyblizania i accordingly swiatla reaguja
+    /*
+    float dzielenie = (distance - MINDIST - 20) / (MAXDIST - MINDIST);
+    distance_in_pixels = dzielenie * (NUMPIXELS);
+    if (distance_in_pixels > NUMPIXELS){
+      distance_in_pixels = NUMPIXELS;
+    } else if (distance_in_pixels <0){
+      distance_in_pixels = 0;
+    }   
+    newPixels = distance_in_pixels;
+ 
+   //Czujnik oddalania i przyblizania i accordingly swiatla reaguja
   if (newPixels < prevPixels){ //zmniejszylo sie
     for (int i = prevPixels; i>=distance_in_pixels; i--) {
       pixels.setPixelColor(i, pixels.Color(0, 0, 0));
@@ -392,8 +392,5 @@ void loop() {
 
     prevPixels = distance_in_pixels;
   */
-  
-
-  delay(50);
   
 }
