@@ -1,0 +1,319 @@
+//GENERAL IDEA
+bool ON_STAIRS;
+int peopleOnStairs;
+bool enteredFromTop;
+bool enteredFromBottom;
+unsigned long currentTime;
+unsigned long timeMarker;
+
+#define TIMEOUT 60000 //in ms so 60sec 
+
+//BT ==========================
+#include "BluetoothSerial.h"
+
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+#endif
+
+BluetoothSerial SerialBT;
+
+//TOF =============================
+#include "Adafruit_VL53L0X.h"
+
+// address we will assign if dual sensor is present
+#define LOX1_ADDRESS 0x30
+#define LOX2_ADDRESS 0x31
+
+// set the pins to shutdown
+#define SHT_LOX1 17
+#define SHT_LOX2 16
+
+// objects for the vl53l0x
+Adafruit_VL53L0X lox1 = Adafruit_VL53L0X();
+Adafruit_VL53L0X lox2 = Adafruit_VL53L0X();
+int distance = 0;
+int distance2 = 0;
+int distance_in_pixels = 0;
+int newPixels = 0;
+int prevPixels = 0;
+#define MINDIST 50.0
+#define MAXDIST 500.0
+
+// this holds the measurement
+VL53L0X_RangingMeasurementData_t measure1;
+VL53L0X_RangingMeasurementData_t measure2;
+
+//LED ==============================
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+ #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
+#endif
+
+// Which pin on the Arduino is connected to the NeoPixels?
+#define PIN       15 // On Trinket or Gemma, suggest changing this to 1
+
+// How many NeoPixels are attached to the Arduino?
+#define NUMPIXELS 300 // Popular NeoPixel ring size
+
+// When setting up the NeoPixel library, we tell it how many pixels,
+// and which pin to use to send signals. Note that for older NeoPixel
+// strips you might need to change the third parameter -- see the
+// strandtest example for more information on possible values.
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+
+#define DELAYVAL 0 // Time (in milliseconds) to pause between pixels
+
+//TOF 
+void setID() {
+  // all reset
+  digitalWrite(SHT_LOX1, LOW);    
+  digitalWrite(SHT_LOX2, LOW);
+  delay(10);
+  // all unreset
+  digitalWrite(SHT_LOX1, HIGH);
+  digitalWrite(SHT_LOX2, HIGH);
+  delay(10);
+
+  // activating LOX1 and reseting LOX2
+  digitalWrite(SHT_LOX1, HIGH);
+  digitalWrite(SHT_LOX2, LOW);
+
+  // initing LOX1
+  if(!lox1.begin(LOX1_ADDRESS)) {
+    Serial.println(F("Failed to boot first VL53L0X"));
+    while(1);
+  }
+  delay(10);
+
+  // activating LOX2
+  digitalWrite(SHT_LOX2, HIGH);
+  delay(10);
+
+  //initing LOX2
+  if(!lox2.begin(LOX2_ADDRESS)) {
+    Serial.println(F("Failed to boot second VL53L0X"));
+    while(1);
+  }
+}
+
+void read_dual_sensors() {
+  
+  lox1.rangingTest(&measure1, false); // pass in 'true' to get debug data printout!
+  lox2.rangingTest(&measure2, false); // pass in 'true' to get debug data printout!
+
+   //print sensor one reading
+  Serial.print(F("1: "));
+  if(measure1.RangeStatus != 4) {     // if not out of range
+    Serial.print(measure1.RangeMilliMeter);
+    distance = measure1.RangeMilliMeter;
+  } else {
+    Serial.print(F("Out of range"));
+  }
+  
+  Serial.print(F(" "));
+
+   //print sensor two reading
+  Serial.print(F("2: "));
+  if(measure2.RangeStatus != 4) {
+    Serial.print(measure2.RangeMilliMeter);
+    distance2 = measure2.RangeMilliMeter;
+  } else {
+    Serial.print(F("Out of range "));
+    Serial.print(measure2.RangeMilliMeter);
+  }
+  
+  Serial.println();
+}
+
+void setup() {
+
+  //GENERAL IDEA
+  ON_STAIRS = false;
+  peopleOnStairs = 0;
+  enteredFromTop = false;
+  enteredFromBottom = false;
+
+  
+//TOF
+  Serial.begin(115200);
+  SerialBT.begin("ESP32test"); //Bluetooth device name
+
+  // wait until serial port opens for native USB devices
+  while (! Serial) { delay(1); }
+
+  pinMode(SHT_LOX1, OUTPUT);
+  pinMode(SHT_LOX2, OUTPUT);
+
+  Serial.println(F("Shutdown pins inited..."));
+
+  digitalWrite(SHT_LOX1, LOW);
+  digitalWrite(SHT_LOX2, LOW);
+
+  Serial.println(F("Both in reset mode...(pins are low)"));
+  
+  
+  Serial.println(F("Starting..."));
+  setID();
+ 
+
+ //LED 
+ 
+ // These lines are specifically to support the Adafruit Trinket 5V 16 MHz.
+  // Any other board, you can remove this part (but no harm leaving it):
+#if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+#endif
+  // END of Trinket-specific code.
+
+  pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+  delay(100);
+  pixels.clear();
+}
+
+void turnLedOn()
+  {   
+    for(int i=0; i<NUMPIXELS; i++) 
+      {
+        pixels.setPixelColor(i, pixels.Color(0, 180, 0));
+        pixels.show();   // Send the updated pixel colors to the hardware.
+        delay(DELAYVAL); // Pause before next pass through loop
+      }
+  }
+
+void turnLedOff()
+{
+  for(int i=NUMPIXELS-1; i>=0; i--) 
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+      pixels.show();   // Send the updated pixel colors to the hardware.
+      delay(DELAYVAL); // Pause before next pass through loop
+    }
+}
+
+bool sensorTop() //1 is Top, 2 is Bottom
+{
+  if(distance < 1000)
+    return true;
+  else
+    return false;
+}
+
+bool sensorBottom() //1 is Top, 2 is Bottom
+{
+  if(distance2 < 1000)
+    return true;
+  else
+    return false;
+}
+
+bool timeout()
+{
+  currentTime = millis();
+  if((timeMarker - currentTime ) >= TIMEOUT)
+    return true;
+  else
+    return false;
+}
+
+void loop() {
+
+  if (Serial.available()) {
+    SerialBT.write(Serial.read());
+  }
+  if (SerialBT.available()) {
+    Serial.write(SerialBT.read());
+  }
+  //Serial.println();
+  read_dual_sensors();
+  
+  float dzielenie = (distance - MINDIST - 20) / (MAXDIST - MINDIST);
+  distance_in_pixels = dzielenie * (NUMPIXELS);
+  if (distance_in_pixels > NUMPIXELS){
+    distance_in_pixels = NUMPIXELS;
+  } else if (distance_in_pixels <0){
+    distance_in_pixels = 0;
+  }
+  
+  newPixels = distance_in_pixels;
+ 
+  
+
+  //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
+  if(sensorTop && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od gory
+    {
+      turnLedOn();
+      ON_STAIRS = true;
+      enteredFromTop = true;
+      peopleOnStairs++;
+      timeMarker = millis();
+    }
+  else if(sensorTop  && ON_STAIRS && enteredFromTop) //dodaj liczbe osob jak wchodzi od gory i zaczal od gory
+    {
+      peopleOnStairs++;    
+    }
+  else if(sensorBottom && ON_STAIRS && enteredFromTop && peopleOnStairs > 1) //odejmij liczbe osob jak wyszedl z dolu i zaczal od gory i na schodach byla wiecej niz 1 osoba
+    {
+      peopleOnStairs--;
+    }
+  else if(sensorBottom && ON_STAIRS && enteredFromTop && peopleOnStairs == 1) //jesli wyszedl z dolu, byl ktos na schodach, zaczal od gory i tylko 1 os byla na schodach to LED off
+    {
+      turnLedOff();
+      ON_STAIRS = false;
+      enteredFromTop = false;
+      peopleOnStairs = 0;
+    }
+
+   //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od dolu
+   else if(sensorBottom && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od dolu
+    {
+      turnLedOn();
+      ON_STAIRS = true;
+      enteredFromBottom = true;
+      peopleOnStairs++;
+      timeMarker = millis();
+    }
+  else if(sensorBottom  && ON_STAIRS && enteredFromBottom) //dodaj liczbe osob jak wchodzi od dolu i zaczal od dolu
+    {
+      peopleOnStairs++;    
+    }
+  else if(sensorTop && ON_STAIRS && enteredFromBottom && peopleOnStairs > 1) //odejmij liczbe osob jak wyszedl z gory i zaczal od dolu i na schodach byla wiecej niz 1 osoba
+    {
+      peopleOnStairs--;
+    }
+  else if(sensorTop && ON_STAIRS && enteredFromBottom && peopleOnStairs == 1) //jesli wyszedl z gory, byl ktos na schodach, zaczal od dolu i tylko 1 os byla na schodach to LED off
+    {
+      turnLedOff();
+      ON_STAIRS = false;
+      enteredFromBottom = false;
+      peopleOnStairs = 0;
+    }
+
+  //wylaczanie LED after timeout ( 60 sekund )
+  if(timeout())
+    {
+      turnLedOff();
+    }
+
+    
+  
+  
+  /* //Czujnik oddalania i przyblizania i accordingly swiatla reaguja
+  if (newPixels < prevPixels){ //zmniejszylo sie
+    for (int i = prevPixels; i>=distance_in_pixels; i--) {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+      pixels.show();   // Send the updated pixel colors to the hardware.
+      delay(DELAYVAL); // Pause before next pass through loop
+      } 
+  } else if (newPixels > prevPixels){
+    for (int i = prevPixels; i<distance_in_pixels; i++) {
+      pixels.setPixelColor(i, pixels.Color(125, 0, 125));
+      pixels.show();   // Send the updated pixel colors to the hardware.
+      delay(DELAYVAL); // Pause before next pass through loop
+      }
+    }
+
+    prevPixels = distance_in_pixels;
+  */
+
+  
+}
