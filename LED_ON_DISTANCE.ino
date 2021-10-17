@@ -7,6 +7,7 @@ bool enteredFromTop;
 bool enteredFromBottom;
 unsigned long currentTime;
 unsigned long timeMarker;
+int command;
 
 #define TIMEOUT 60000 //in ms so 60sec 
 #define MIN_SENSOR1_DISTANCE 900
@@ -108,28 +109,28 @@ void read_dual_sensors() {
   lox2.rangingTest(&measure2, false); // pass in 'true' to get debug data printout!
 
    //print sensor one reading
-  Serial.print(F("1: "));
+  //Serial.print(F("1: "));
   if(measure1.RangeStatus != 4) {     // if not out of range
-    Serial.print(measure1.RangeMilliMeter);
+    //Serial.print(measure1.RangeMilliMeter);
     distance = measure1.RangeMilliMeter;
   } else {
-    Serial.print(F("Out of range"));
+    //Serial.print(F("Out of range"));
   }
   
-  Serial.print(F(" "));
+  //Serial.print(F(" "));
 
    //print sensor two reading
-  Serial.print(F("2: "));
+  //Serial.print(F("2: "));
   if(measure2.RangeStatus != 4) {
-    Serial.print(measure2.RangeMilliMeter);
+    //Serial.print(measure2.RangeMilliMeter);
     distance2 = measure2.RangeMilliMeter;
   } else {
-    Serial.print(F("Out of range "));
-    Serial.print(measure2.RangeMilliMeter);
+    //Serial.print(F("Out of range "));
+    //Serial.print(measure2.RangeMilliMeter);
     distance2 = 8000;
   }
   
-  Serial.println();
+  //Serial.println();
 }
 
 void setup() {
@@ -142,6 +143,7 @@ void setup() {
   enteredFromTop = false;
   enteredFromBottom = false;
   turnLedOffTop();
+  command = 0;
   
 //TOF
   Serial.begin(115200);
@@ -178,6 +180,17 @@ void setup() {
   delay(100);
   pixels.clear();
 }
+
+void turnLedOn()
+  {   
+    for(int i=0; i<NUMPIXELS; i++) 
+      {
+        pixels.setPixelColor(i, pixels.Color(RED));
+        delay(DELAYVAL); // Pause before next pass through loop
+      }
+      pixels.show();   // Send the updated pixel colors to the hardware.
+  }
+
 
 void turnLedOnTop()
   {   
@@ -219,15 +232,6 @@ void turnLedOffBottom()
     }
 }
 
-//bool sensorTop() //1 is Top, 2 is Bottom
-//{
-//  read_dual_sensors();
-//  if(distance < MIN_SENSOR1_DISTANCE)
-//    return true;
-//  else
-//    return false;
-//}
-
 void checkSensors()
 {
   read_dual_sensors();
@@ -241,29 +245,11 @@ void checkSensors()
   else
     sensorBottom = false;
 }
-//
-//void checkSensorBottom()
-//{
-//  read_dual_sensors();
-//  if(distance2 < MIN_SENSOR2_DISTANCE)
-//    sensorBottom = true;
-//  else
-//    sensorBottom = false;
-//}
-
-//bool sensorBottom() //1 is Top, 2 is Bottom
-//{
-//  read_dual_sensors();
-//  if(distance2 < MIN_SENSOR2_DISTANCE)
-//    return true;
-//  else
-//    return false;
-//}
 
 bool timeout()
 {
   currentTime = millis();
-  if((timeMarker - currentTime ) >= TIMEOUT)
+  if((currentTime - timeMarker) >= TIMEOUT)
     return true;
   else
     return false;
@@ -276,70 +262,15 @@ void loop() {
   }
   if (SerialBT.available()) {
     Serial.write(SerialBT.read());
+    command = SerialBT.read();
   }
-  
-//  
-//    if(ON_STAIRS)
-//    {
-//      Serial.println("ON_STAIRS True");
-//    }
-//  else
-//    {
-//      Serial.println("ON_STAIRS False");
-//    };
-//  
-//  Serial.print("peopleOnStairs ");
-//  Serial.println(peopleOnStairs);
-//  
-//if(enteredFromTop)
-//    {
-//      Serial.println("enteredFromTop True");
-//    }
-//  else
-//    {
-//      Serial.println("enteredFromTop False");
-//    };
-//  
-//  if(enteredFromBottom)
-//    {
-//      Serial.println("enteredFromBottom True");
-//    }
-//  else
-//    {
-//      Serial.println("enteredFromBottom False");
-//    };
-//
-//  if(sensorTop())
-//    {
-//      Serial.println("sensorTop True");
-//    }
-//  else
-//    {
-//      Serial.println("sensorTop False");
-//    };
-//  if(sensorBottom())
-//    {
-//      Serial.println("sensorBottom True");
-//    }
-//  else
-//    {
-//      Serial.println("sensorBottom False");
-//    };
-//  Serial.println();
-  
-  
-//  float dzielenie = (distance - MINDIST - 20) / (MAXDIST - MINDIST);
-//  distance_in_pixels = dzielenie * (NUMPIXELS);
-//  if (distance_in_pixels > NUMPIXELS){
-//    distance_in_pixels = NUMPIXELS;
-//  } else if (distance_in_pixels <0){
-//    distance_in_pixels = 0;
-//  }
-//  
-//  newPixels = distance_in_pixels;
- 
-  
 
+  if(command == 1)
+    {
+      turnLedOn();
+      command = 0;
+    }
+  
   //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
   checkSensors();
   if(sensorTop && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od gory
@@ -403,19 +334,39 @@ void loop() {
       Serial.println("===8===");
     }
   
-    Serial.println();
-    Serial.print("peopleOnStairs ");
-    Serial.println(peopleOnStairs);
-    Serial.println();
+  
 
   //wylaczanie LED after timeout ( 60 sekund )
-//  if(timeout())
-//    {
-//      turnLedOff();
-//    }
+  if(ON_STAIRS && timeout())
+    {
+      turnLedOffTop();
+      ON_STAIRS = false;
+      peopleOnStairs = 0;
+      enteredFromBottom = false;
+      enteredFromTop = false;
+    }
 
-    
+
+
+
+  delay(10);
   
+}
+
+
+
+/* Improvements */
+
+/*
+ * 
+ * Add changing colors, wybieranie kolor itp
+ * Jak wchodzi pierwsza osoba to i tak policz nastepne osoby
+ * Przyspiesz zapalanie swiatel
+ * dodaj indykator iloscai przez RED LED
+ * 
+ */
+
+
   
   /* //Czujnik oddalania i przyblizania i accordingly swiatla reaguja
   if (newPixels < prevPixels){ //zmniejszylo sie
@@ -434,24 +385,66 @@ void loop() {
 
     prevPixels = distance_in_pixels;
   */
+
+
+//  
+//    if(ON_STAIRS)
+//    {
+//      Serial.println("ON_STAIRS True");
+//    }
+//  else
+//    {
+//      Serial.println("ON_STAIRS False");
+//    };
+//  
+//  Serial.print("peopleOnStairs ");
+//  Serial.println(peopleOnStairs);
+//  
+//if(enteredFromTop)
+//    {
+//      Serial.println("enteredFromTop True");
+//    }
+//  else
+//    {
+//      Serial.println("enteredFromTop False");
+//    };
+//  
+//  if(enteredFromBottom)
+//    {
+//      Serial.println("enteredFromBottom True");
+//    }
+//  else
+//    {
+//      Serial.println("enteredFromBottom False");
+//    };
+//
+//  if(sensorTop())
+//    {
+//      Serial.println("sensorTop True");
+//    }
+//  else
+//    {
+//      Serial.println("sensorTop False");
+//    };
+//  if(sensorBottom())
+//    {
+//      Serial.println("sensorBottom True");
+//    }
+//  else
+//    {
+//      Serial.println("sensorBottom False");
+//    };
+//  Serial.println();
   
-
-  delay(5);
   
-}
-
-
-
-/* Improvements */
-
-/*
- * 
- * Add changing colors, wybieranie kolor itp
- * Jak wchodzi pierwsza osoba to i tak policz nastepne osoby
- * Przyspiesz zapalanie swiatel
- * dodaj indykator iloscai przez RED LED
- * 
- */
-
+//  float dzielenie = (distance - MINDIST - 20) / (MAXDIST - MINDIST);
+//  distance_in_pixels = dzielenie * (NUMPIXELS);
+//  if (distance_in_pixels > NUMPIXELS){
+//    distance_in_pixels = NUMPIXELS;
+//  } else if (distance_in_pixels <0){
+//    distance_in_pixels = 0;
+//  }
+//  
+//  newPixels = distance_in_pixels;
  
- */
+  
