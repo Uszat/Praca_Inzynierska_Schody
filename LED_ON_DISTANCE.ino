@@ -264,8 +264,8 @@ void loop() {
     Serial.write(SerialBT.read());
     command = SerialBT.read();
   }
-
-  if(command == 1)
+  Serial.println(command);
+  if(command == -1)
     {
       turnLedOn();
       command = 0;
