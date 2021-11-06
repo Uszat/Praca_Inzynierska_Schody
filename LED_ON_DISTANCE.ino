@@ -7,10 +7,12 @@ bool enteredFromTop;
 bool enteredFromBottom;
 unsigned long currentTime;
 unsigned long timeMarker;
-uint8_t command = 0;
+uint8_t incomingData = 0;
+int command = 0;
 bool newData = false;
 char buf[6];
 int bufIndex = 0;
+int r,g,b = 0;
 
 #define TIMEOUT 60000 //in ms so 60sec 
 #define MIN_SENSOR1_DISTANCE 900
@@ -188,7 +190,7 @@ void turnLedOn()
   {   
     for(int i=0; i<NUMPIXELS; i++) 
       {
-        pixels.setPixelColor(i, pixels.Color(RED));
+        pixels.setPixelColor(i, pixels.Color(r, g, b));
         delay(DELAYVAL); // Pause before next pass through loop
       }
       pixels.show();   // Send the updated pixel colors to the hardware.
@@ -260,25 +262,37 @@ bool timeout()
 
 
 
-
-void recvWithEndMarker(){
+void receiveOneChar(){
   if (SerialBT.available() > 0) {
-    command = SerialBT.read();
-    bufIndex++;
+    incomingData = SerialBT.read();
     newData = true;
   }
 }
 
-void showNewData() {
+void setRGB() {
   if (newData == true) {
-    buf[bufIndex] = (char)command;
+    buf[bufIndex] = (char)incomingData;
     newData = false;
-    if(bufIndex >= 5)
+    bufIndex++;
+
+    if(bufIndex == 2)
     {
-      for(int i = 0; i <= bufIndex; i++)
+      r = (int)strtol(buf, NULL, 16);
+    }else if(bufIndex == 4)
+    {
+      g = (int)strtol(buf, NULL, 16);
+    }else if(bufIndex == 6)
+    {
+      b = (int)strtol(buf, NULL, 16);
+    }
+    
+    if(bufIndex >= 6)
+    {
+      for(int i = 0; i < bufIndex; i++)
       {
         Serial.print(buf[i]);
       }
+      command = 1;
       bufIndex = 0;  
       Serial.println();
     }
@@ -292,15 +306,11 @@ void loop() {
   }
 
 
-  recvWithEndMarker();
-  showNewData();
+  receiveOneChar();
+  setRGB();
 
-//  if (SerialBT.available()) {
-//    Serial.write(SerialBT.read());
-//    command = SerialBT.read();
-//  }
-  //Serial.println(command);
-  if(command == -1)
+
+  if(command == 1)
     {
       turnLedOn();
       command = 0;
@@ -383,7 +393,7 @@ void loop() {
 
 
 
-//debugData();
+  debugData(false);
 
 
   delay(10);
@@ -392,9 +402,10 @@ void loop() {
 
 
 
-void debugData()
+void debugData(isOn)
 {
 
+  if(isOn){
   
     if(ON_STAIRS)
     {
@@ -443,7 +454,7 @@ if(enteredFromTop)
       Serial.println("sensorBottom False");
     };
   Serial.println();
-  
+  }
 }
 
 /* Improvements */
