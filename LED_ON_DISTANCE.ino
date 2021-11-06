@@ -7,7 +7,10 @@ bool enteredFromTop;
 bool enteredFromBottom;
 unsigned long currentTime;
 unsigned long timeMarker;
-int command;
+uint8_t command = 0;
+bool newData = false;
+char buf[6];
+int bufIndex = 0;
 
 #define TIMEOUT 60000 //in ms so 60sec 
 #define MIN_SENSOR1_DISTANCE 900
@@ -255,16 +258,48 @@ bool timeout()
     return false;
 }
 
+
+
+
+void recvWithEndMarker(){
+  if (SerialBT.available() > 0) {
+    command = SerialBT.read();
+    bufIndex++;
+    newData = true;
+  }
+}
+
+void showNewData() {
+  if (newData == true) {
+    buf[bufIndex] = (char)command;
+    newData = false;
+    if(bufIndex >= 5)
+    {
+      for(int i = 0; i <= bufIndex; i++)
+      {
+        Serial.print(buf[i]);
+      }
+      bufIndex = 0;  
+      Serial.println();
+    }
+  }
+}
+
 void loop() {
 
   if (Serial.available()) {
     SerialBT.write(Serial.read());
   }
-  if (SerialBT.available()) {
-    Serial.write(SerialBT.read());
-    command = SerialBT.read();
-  }
-  Serial.println(command);
+
+
+  recvWithEndMarker();
+  showNewData();
+
+//  if (SerialBT.available()) {
+//    Serial.write(SerialBT.read());
+//    command = SerialBT.read();
+//  }
+  //Serial.println(command);
   if(command == -1)
     {
       turnLedOn();
@@ -348,12 +383,68 @@ void loop() {
 
 
 
+//debugData();
+
 
   delay(10);
   
 }
 
 
+
+void debugData()
+{
+
+  
+    if(ON_STAIRS)
+    {
+      Serial.println("ON_STAIRS True");
+    }
+  else
+    {
+      Serial.println("ON_STAIRS False");
+    };
+  
+  Serial.print("peopleOnStairs ");
+  Serial.println(peopleOnStairs);
+  
+if(enteredFromTop)
+    {
+      Serial.println("enteredFromTop True");
+    }
+  else
+    {
+      Serial.println("enteredFromTop False");
+    };
+  
+  if(enteredFromBottom)
+    {
+      Serial.println("enteredFromBottom True");
+    }
+  else
+    {
+      Serial.println("enteredFromBottom False");
+    };
+
+  if(sensorTop)
+    {
+      Serial.println("sensorTop True");
+    }
+  else
+    {
+      Serial.println("sensorTop False");
+    };
+  if(sensorBottom)
+    {
+      Serial.println("sensorBottom True");
+    }
+  else
+    {
+      Serial.println("sensorBottom False");
+    };
+  Serial.println();
+  
+}
 
 /* Improvements */
 
@@ -387,54 +478,7 @@ void loop() {
   */
 
 
-//  
-//    if(ON_STAIRS)
-//    {
-//      Serial.println("ON_STAIRS True");
-//    }
-//  else
-//    {
-//      Serial.println("ON_STAIRS False");
-//    };
-//  
-//  Serial.print("peopleOnStairs ");
-//  Serial.println(peopleOnStairs);
-//  
-//if(enteredFromTop)
-//    {
-//      Serial.println("enteredFromTop True");
-//    }
-//  else
-//    {
-//      Serial.println("enteredFromTop False");
-//    };
-//  
-//  if(enteredFromBottom)
-//    {
-//      Serial.println("enteredFromBottom True");
-//    }
-//  else
-//    {
-//      Serial.println("enteredFromBottom False");
-//    };
-//
-//  if(sensorTop())
-//    {
-//      Serial.println("sensorTop True");
-//    }
-//  else
-//    {
-//      Serial.println("sensorTop False");
-//    };
-//  if(sensorBottom())
-//    {
-//      Serial.println("sensorBottom True");
-//    }
-//  else
-//    {
-//      Serial.println("sensorBottom False");
-//    };
-//  Serial.println();
+
   
   
 //  float dzielenie = (distance - MINDIST - 20) / (MAXDIST - MINDIST);
