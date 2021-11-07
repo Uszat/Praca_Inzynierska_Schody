@@ -1,0 +1,178 @@
+uint8_t incomingData = 0;
+int command = 0;
+bool newData = false;
+char buf[7];
+char tempBuf[2];
+int bufIndex = 0;
+int r,g,b = 0;
+
+
+//BT ==========================
+#include "BluetoothSerial.h"
+
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+#endif
+
+BluetoothSerial SerialBT;
+
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+ #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
+#endif
+
+// Which pin on the Arduino is connected to the NeoPixels?
+#define PIN       15 // On Trinket or Gemma, suggest changing this to 1
+
+// How many NeoPixels are attached to the Arduino?
+#define NUMPIXELS 300 // Popular NeoPixel ring size
+
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+
+#define DELAYVAL 0 // Time (in milliseconds) to pause between pixels
+
+void turnLedOn()
+  {   
+    for(int i=0; i<NUMPIXELS; i++) 
+      {
+        pixels.setPixelColor(i, pixels.Color(r, g, b));
+        delay(DELAYVAL); // Pause before next pass through loop
+      }
+      pixels.show();   // Send the updated pixel colors to the hardware.
+  }
+
+void clearBuffer(){
+  for(int i = 0; i< 2; i++)
+    { 
+      tempBuf[i] = '0';
+    }
+}
+
+void receiveOneChar(){
+  
+  if(SerialBT.available() > 0){
+    incomingData = SerialBT.read();
+    buf[bufIndex] = (char)incomingData;
+    if(buf[bufIndex] == '\n')
+    {
+      newData = true;
+    }else{
+      bufIndex++;
+    }
+  }
+   Serial.print("After received buffer");
+   for(int i = 0; i< 9; i++)
+    {
+      Serial.print(tempBuf[i]);
+    }
+    Serial.println(); 
+}
+
+void setRGB() {
+  
+  if (newData == true) {
+      newData = false;
+//    clearBuffer();
+
+Serial.print("Before ");
+ for(int i = 0; i< strlen(tempBuf); i++)
+    {
+      Serial.print(tempBuf[i]);
+    }
+    Serial.println();
+      for(int i = 0; i < 6; i+=2)
+      {
+        for(int j = 0; j < 2; j++)
+        {
+//          tempBuf[j] = buf[i+j];
+          tempBuf[j] = 'F';
+        }
+        for(int k = 2; k<strlen(tempBuf); k++)
+        {
+          tempBuf[k] = '\0';
+        }
+Serial.print("After ");
+ for(int i = 0; i< strlen(tempBuf); i++)
+    {
+      Serial.print(tempBuf[i]);
+    }
+Serial.println();
+
+        if(i==0)
+        {
+           r = (int)strtol("FA", NULL, 16);
+           Serial.print("r ");
+           Serial.println(r);     
+        }
+        else if(i==2)
+        {
+           g = (int)strtol(tempBuf, NULL, 16);
+           Serial.print("g ");
+           Serial.println(g);
+        }
+        else if(i==4)
+        {
+           b = (int)strtol(tempBuf, NULL, 16);
+           Serial.print("b ");
+           Serial.println(b);
+        }
+      }
+      Serial.print("buffer: ");
+      for(int i = 0; i < strlen(buf); i++)
+      {
+        Serial.print(buf[i]);
+      }
+      Serial.println();
+    
+      command = 1;
+      bufIndex = 0;  
+    }
+  
+}
+
+void doCommand(){
+
+  if(command == 1)
+    {
+      turnLedOn();
+      command = 0;
+    }
+}
+
+void setup()
+{
+  
+//BT
+  Serial.begin(115200);
+  SerialBT.begin("ESP32test"); //Bluetooth device name
+  Serial.println("Started!");
+  Serial.print("Before clear");
+   for(int i = 0; i< 8; i++)
+    {
+      Serial.print(tempBuf[i]);
+    }
+    Serial.println();
+  clearBuffer();
+    Serial.print("After clear");
+   for(int i = 0; i< 8; i++)
+    {
+      Serial.print(tempBuf[i]);
+    }
+    Serial.println();
+  #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+#endif
+  // END of Trinket-specific code.
+
+  pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+  delay(100);
+  pixels.clear();
+}
+
+void loop()
+{
+  receiveOneChar();
+  setRGB();
+  doCommand();
+  delay(1);  
+}
