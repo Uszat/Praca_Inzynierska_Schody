@@ -10,9 +10,14 @@ unsigned long timeMarker;
 uint8_t incomingData = 0;
 int command = 0;
 bool newData = false;
-char buf[6];
+char buf[7];
 int bufIndex = 0;
 int r,g,b = 0;
+char tempBuf[2];
+int setter = 0;
+
+void doCommand();
+void setRGB();
 
 #define TIMEOUT 60000 //in ms so 60sec 
 #define MIN_SENSOR1_DISTANCE 900
@@ -149,6 +154,9 @@ void setup() {
   enteredFromBottom = false;
   turnLedOffTop();
   command = 0;
+  r = 180;
+  g = 0;
+  b = 180;
   
 //TOF
   Serial.begin(115200);
@@ -201,7 +209,7 @@ void turnLedOnTop()
   {   
     for(int i=0; i<NUMPIXELS; i++) 
       {
-        pixels.setPixelColor(i, pixels.Color(WHITE));
+        pixels.setPixelColor(i, pixels.Color(r,g,b));
         pixels.show();   // Send the updated pixel colors to the hardware.
         delay(DELAYVAL); // Pause before next pass through loop
       }
@@ -211,7 +219,7 @@ void turnLedOnBottom()
   {   
     for(int i=NUMPIXELS-1; i>=0; i--) 
       {
-        pixels.setPixelColor(i, pixels.Color(WHITE));
+        pixels.setPixelColor(i, pixels.Color(r,g,b));
         pixels.show();   // Send the updated pixel colors to the hardware.
         delay(DELAYVAL); // Pause before next pass through loop
       }
@@ -262,62 +270,62 @@ bool timeout()
 
 
 
-void receiveOneChar(){
-  if (SerialBT.available() > 0) {
+void receiveBTData(){
+ if(SerialBT.available() > 0){
     incomingData = SerialBT.read();
-    newData = true;
+    buf[bufIndex] = (char)incomingData;
+    setter = 1;
+    if(buf[bufIndex] == '\n')
+    {
+      setRGB();
+    }else{
+      bufIndex++;
+    }
   }
 }
 
 void setRGB() {
-  if (newData == true) {
-    buf[bufIndex] = (char)incomingData;
-    newData = false;
-    bufIndex++;
-
-    if(bufIndex == 2)
-    {
-      r = (int)strtol(buf, NULL, 16);
-    }else if(bufIndex == 4)
-    {
-      g = (int)strtol(buf, NULL, 16);
-    }else if(bufIndex == 6)
-    {
-      b = (int)strtol(buf, NULL, 16);
-    }
     
-    if(bufIndex >= 6)
-    {
-      for(int i = 0; i < bufIndex; i++)
+    for(int i = 0; i < 6; i+=2)
       {
-        Serial.print(buf[i]);
+        for(int j = 0; j < 2; j++)
+        {
+          tempBuf[j] = buf[i+j];
+        }
+
+        if(i==0)
+        {
+           r = (int)strtol(tempBuf, NULL, 16);   
+        }
+        else if(i==2)
+        {
+           g = (int)strtol(tempBuf, NULL, 16);;
+        }
+        else if(i==4)
+        {
+           b = (int)strtol(tempBuf, NULL, 16);
+        }
       }
+
       command = 1;
+      doCommand();
       bufIndex = 0;  
-      Serial.println();
-    }
-  }
+
 }
 
-void loop() {
-
-  if (Serial.available()) {
-    SerialBT.write(Serial.read());
-  }
-
-
-  receiveOneChar();
-  setRGB();
-
+void doCommand(){
 
   if(command == 1)
     {
       turnLedOn();
       command = 0;
+      setter = 0;
+      
     }
-  
-  //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
-  checkSensors();
+}
+
+void manageSensorLED()
+{
   if(sensorTop && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od gory
     {
       turnLedOnTop();
@@ -378,10 +386,8 @@ void loop() {
       peopleOnStairs = 0;
       Serial.println("===8===");
     }
-  
-  
 
-  //wylaczanie LED after timeout ( 60 sekund )
+    //wylaczanie LED after timeout ( 60 sekund )
   if(ON_STAIRS && timeout())
     {
       turnLedOffTop();
@@ -390,19 +396,31 @@ void loop() {
       enteredFromBottom = false;
       enteredFromTop = false;
     }
-
-
-
-  debugData(false);
-
-
-  delay(10);
   
+}
+
+void loop() {
+//
+//  if (Serial.available()) {
+//    SerialBT.write(Serial.read());
+//  }
+
+  receiveBTData();
+  
+//Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
+  if(setter == 0)
+  {
+    checkSensors();
+    manageSensorLED();
+    debugData(false);
+  }
+
+  delay(1);
 }
 
 
 
-void debugData(isOn)
+void debugData(bool isOn)
 {
 
   if(isOn){
