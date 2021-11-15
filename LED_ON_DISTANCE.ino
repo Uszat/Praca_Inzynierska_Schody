@@ -8,7 +8,6 @@ bool enteredFromBottom;
 unsigned long currentTime;
 unsigned long timeMarker;
 uint8_t incomingData = 0;
-int command = 0;
 bool newData = false;
 char buf[7];
 int bufIndex = 0;
@@ -16,8 +15,13 @@ int r,g,b = 0;
 char tempBuf[2];
 int setter = 0;
 
-void doCommand();
-void setRGB();
+int counter = 0;
+int newCounter = 0;
+int numColors = 255;
+bool rainbowSet = false;
+bool ledOn = false;
+
+void setAction();
 
 #define TIMEOUT 60000 //in ms so 60sec 
 #define MIN_SENSOR1_DISTANCE 900
@@ -118,8 +122,6 @@ void read_dual_sensors() {
   lox1.rangingTest(&measure1, false); // pass in 'true' to get debug data printout!
   lox2.rangingTest(&measure2, false); // pass in 'true' to get debug data printout!
 
-   //print sensor one reading
-  //Serial.print(F("1: "));
   if(measure1.RangeStatus != 4) {     // if not out of range
     //Serial.print(measure1.RangeMilliMeter);
     distance = measure1.RangeMilliMeter;
@@ -127,20 +129,13 @@ void read_dual_sensors() {
     //Serial.print(F("Out of range"));
   }
   
-  //Serial.print(F(" "));
-
-   //print sensor two reading
-  //Serial.print(F("2: "));
   if(measure2.RangeStatus != 4) {
     //Serial.print(measure2.RangeMilliMeter);
     distance2 = measure2.RangeMilliMeter;
   } else {
     //Serial.print(F("Out of range "));
     //Serial.print(measure2.RangeMilliMeter);
-    distance2 = 8000;
   }
-  
-  //Serial.println();
 }
 
 void setup() {
@@ -152,11 +147,12 @@ void setup() {
   sensorBottom = false;
   enteredFromTop = false;
   enteredFromBottom = false;
-  turnLedOffTop();
-  command = 0;
+  turnLedOff();
   r = 180;
   g = 0;
   b = 180;
+
+  resetBuffers();
   
 //TOF
   Serial.begin(115200);
@@ -175,10 +171,8 @@ void setup() {
 
   Serial.println(F("Both in reset mode...(pins are low)"));
   
-  
   Serial.println(F("Starting..."));
   setID();
- 
 
  //LED 
  
@@ -196,6 +190,7 @@ void setup() {
 
 void turnLedOn()
   {   
+    
     for(int i=0; i<NUMPIXELS; i++) 
       {
         pixels.setPixelColor(i, pixels.Color(r, g, b));
@@ -203,7 +198,6 @@ void turnLedOn()
       }
       pixels.show();   // Send the updated pixel colors to the hardware.
   }
-
 
 void turnLedOnTop()
   {   
@@ -245,6 +239,16 @@ void turnLedOffBottom()
     }
 }
 
+void turnLedOff()
+{
+  for(int i=NUMPIXELS-1; i>=0; i--) 
+    {
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+      delay(DELAYVAL); // Pause before next pass through loop
+    }
+    pixels.show();   // Send the updated pixel colors to the hardware.
+}
+
 void checkSensors()
 {
   read_dual_sensors();
@@ -268,67 +272,223 @@ bool timeout()
     return false;
 }
 
-
-
 void receiveBTData(){
  if(SerialBT.available() > 0){
-    incomingData = SerialBT.read();
-    buf[bufIndex] = (char)incomingData;
-    setter = 1;
-    if(buf[bufIndex] == '\n')
+    incomingData = SerialBT.read(); 
+    if((char)incomingData == '\n')
     {
-      setRGB();
+      setAction();
     }else{
+      buf[bufIndex] = (char)incomingData;
+      setter = 1;
       bufIndex++;
     }
   }
 }
 
-void setRGB() {
-    
-    for(int i = 0; i < 6; i+=2)
-      {
-        for(int j = 0; j < 2; j++)
-        {
-          tempBuf[j] = buf[i+j];
-        }
-
-        if(i==0)
-        {
-           r = (int)strtol(tempBuf, NULL, 16);   
-        }
-        else if(i==2)
-        {
-           g = (int)strtol(tempBuf, NULL, 16);;
-        }
-        else if(i==4)
-        {
-           b = (int)strtol(tempBuf, NULL, 16);
-        }
+bool arrayContains(char givenArray[], char givenString[]){
+    for(int j = 0; j<sizeof(givenString)/sizeof(givenString[0])-1; j++){
+      if(givenArray[j] != givenString[j]){
+        return false;
       }
-
-      command = 1;
-      doCommand();
-      bufIndex = 0;  
-
+    }
+    return true;
 }
 
-void doCommand(){
-
-  if(command == 1)
-    {
+void setAction() {
+  if(arrayContains(buf, "off"))
+  {
+    turnLedOff();
+    resetState();
+    ledOn = false;
+  } 
+  else if (arrayContains(buf, "on"))
+  {
+    ledOn = true;
+    if(!rainbowSet){
       turnLedOn();
-      command = 0;
-      setter = 0;
-      
     }
+  } 
+  else if(arrayContains(buf, "auto"))
+  {
+    turnLedOffTop();
+    resetState();
+    setter = 0;
+  } 
+  else if(arrayContains(buf, "rbow"))
+  {
+    rainbowSet = true;
+  }
+  else 
+  {
+    rainbowSet = false;
+    setColor(); 
+  }
+  bufIndex = 0;  
+  resetBuffers();
+}
+
+void setLedBrightness(){
+  int brightness;
+  for(int i = 2, j = 0; i<6; i++, j++){
+    tempBuf[j] = buf[i];
+  }
+  brightness = (int)strtol(tempBuf, NULL, 10);
+  brightness += 1;
+  r = r - (r/brightness);
+  g = g - (g/brightness);
+  b = b - (b/brightness);
+  turnLedOn();
+}
+
+void setColor(){
+  for(int i = 0; i < 6; i+=2)
+    {
+      for(int j = 0; j < 2; j++)
+      {
+        tempBuf[j] = buf[i+j];
+      }
+      if(i==0)
+      {
+         r = (int)strtol(tempBuf, NULL, 16);   
+      }
+      else if(i==2)
+      {
+         g = (int)strtol(tempBuf, NULL, 16);;
+      }
+      else if(i==4)
+      {
+         b = (int)strtol(tempBuf, NULL, 16);
+      }
+    }
+    turnLedOn();
+}
+
+long HSBtoRGB(float _hue, float _sat, float _brightness) {
+    float red = 0.0;
+    float green = 0.0;
+    float blue = 0.0;
+    
+    if (_sat == 0.0) {
+        red = _brightness;
+        green = _brightness;
+        blue = _brightness;
+    } else {
+        if (_hue == 360.0) {
+            _hue = 0;
+        }
+
+        int slice = _hue / 60.0;
+        float hue_frac = (_hue / 60.0) - slice;
+
+        float aa = _brightness * (1.0 - _sat);
+        float bb = _brightness * (1.0 - _sat * hue_frac);
+        float cc = _brightness * (1.0 - _sat * (1.0 - hue_frac));
+        
+        switch(slice) {
+            case 0:
+                red = _brightness;
+                green = cc;
+                blue = aa;
+                break;
+            case 1:
+                red = bb;
+                green = _brightness;
+                blue = aa;
+                break;
+            case 2:
+                red = aa;
+                green = _brightness;
+                blue = cc;
+                break;
+            case 3:
+                red = aa;
+                green = bb;
+                blue = _brightness;
+                break;
+            case 4:
+                red = cc;
+                green = aa;
+                blue = _brightness;
+                break;
+            case 5:
+                red = _brightness;
+                green = aa;
+                blue = bb;
+                break;
+            default:
+                red = 0.0;
+                green = 0.0;
+                blue = 0.0;
+                break;
+        }
+    }
+
+    long ired = red * 255.0;
+    long igreen = green * 255.0;
+    long iblue = blue * 255.0;
+    
+    return long((ired << 16) | (igreen << 8) | (iblue));
+}
+
+void rainbow(){
+
+  float colorNumber;
+  float saturation = 1; // Between 0 and 1 (0 = gray, 1 = full color)
+  float brightness = 0.4; // Between 0 and 1 (0 = dark, 1 is full brightness)
+  float hue;
+  long color; 
+  
+  counter = newCounter;
+  
+  // colorNumber = counter > numColors ? counter - numColors: counter;
+  // hue = (colorNumber / float(numColors)) * 360; // Number between 0 and 360
+  // color = HSBtoRGB(hue, saturation, brightness); 
+
+  // Get the red, blue and green parts from generated color
+  // int red = color >> 16 & 255;
+  // int green = color >> 8 & 255;
+  // int blue = color & 255;
+
+  // r = red;
+  // g = green;
+  // b = blue;
+
+ // Counter can never be greater then 2 times the number of available colors
+  // the colorNumber = line above takes care of counting backwards (nicely looping animation)
+  // when counter is larger then the number of available colors
+  // counter = (counter + 1) % (numColors * 2);
+
+  for(int i=0; i<NUMPIXELS; i++) 
+    {
+      colorNumber = counter > numColors ? counter - numColors: counter;
+      hue = (colorNumber / float(numColors)) * 360; // Number between 0 and 360
+      color = HSBtoRGB(hue, saturation, brightness);
+      r = color >> 16 & 255;
+      g = color >> 8 & 255;
+      b = color & 255;
+      pixels.setPixelColor(i, pixels.Color(r, g, b));
+      counter = (counter + 1) % (numColors * 2);
+//      Serial.print("colorNumber ");
+//      Serial.println(colorNumber);
+//      Serial.print("counter ");
+//      Serial.println(counter);
+    }
+    pixels.show();   // Send the updated pixel colors to the hardware.
+    //do rainbow dance
+    //on auto click rainbow = true 
+    //so when (rainbow) turnledonrainbow
+//    Serial.println();
+    newCounter = (newCounter+1) % 510;
 }
 
 void manageSensorLED()
 {
   if(sensorTop && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od gory
     {
-      turnLedOnTop();
+      if(!rainbowSet){
+        turnLedOnTop();
+      }
       ON_STAIRS = true;
       enteredFromTop = true;
       peopleOnStairs++;
@@ -359,7 +519,9 @@ void manageSensorLED()
    //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od dolu
    else if(sensorBottom && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od dolu
     {
-      turnLedOnBottom();
+      if(!rainbowSet){
+        turnLedOnBottom();
+      }
       ON_STAIRS = true;
       enteredFromBottom = true;
       peopleOnStairs++;
@@ -390,15 +552,29 @@ void manageSensorLED()
     //wylaczanie LED after timeout ( 60 sekund )
   if(ON_STAIRS && timeout())
     {
-      turnLedOffTop();
-      ON_STAIRS = false;
-      peopleOnStairs = 0;
-      enteredFromBottom = false;
-      enteredFromTop = false;
+      turnLedOff();
+      resetState();
     }
-  
 }
 
+void resetState()
+{
+  ON_STAIRS = false;
+  peopleOnStairs = 0;
+  sensorTop = false;
+  sensorBottom = false;
+  enteredFromTop = false;
+  enteredFromBottom = false;
+}
+
+void resetBuffers(){
+  for(int i = 0; i<sizeof(buf)/sizeof(buf[0]); i++){
+    buf[i] = '\0';
+  }
+  for(int i = 0; i<sizeof(tempBuf)/sizeof(tempBuf[0]); i++){
+    tempBuf[i] = '\0';
+  }
+}
 void loop() {
 //
 //  if (Serial.available()) {
@@ -407,22 +583,26 @@ void loop() {
 
   receiveBTData();
   
-//Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
+  //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
   if(setter == 0)
   {
     checkSensors();
     manageSensorLED();
     debugData(false);
   }
+  if(rainbowSet && ledOn){
+    if(setter == 0 && ON_STAIRS){
+      rainbow(); 
+    }else if(setter == 1){
+      rainbow(); 
+    }
+  }
 
+  
   delay(1);
 }
 
-
-
-void debugData(bool isOn)
-{
-
+void debugData(bool isOn){
   if(isOn){
   
     if(ON_STAIRS)
@@ -484,40 +664,4 @@ if(enteredFromTop)
  * Przyspiesz zapalanie swiatel
  * dodaj indykator iloscai przez RED LED
  * 
- */
-
-
-  
-  /* //Czujnik oddalania i przyblizania i accordingly swiatla reaguja
-  if (newPixels < prevPixels){ //zmniejszylo sie
-    for (int i = prevPixels; i>=distance_in_pixels; i--) {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
-      pixels.show();   // Send the updated pixel colors to the hardware.
-      delay(DELAYVAL); // Pause before next pass through loop
-      } 
-  } else if (newPixels > prevPixels){
-    for (int i = prevPixels; i<distance_in_pixels; i++) {
-      pixels.setPixelColor(i, pixels.Color(125, 0, 125));
-      pixels.show();   // Send the updated pixel colors to the hardware.
-      delay(DELAYVAL); // Pause before next pass through loop
-      }
-    }
-
-    prevPixels = distance_in_pixels;
-  */
-
-
-
-  
-  
-//  float dzielenie = (distance - MINDIST - 20) / (MAXDIST - MINDIST);
-//  distance_in_pixels = dzielenie * (NUMPIXELS);
-//  if (distance_in_pixels > NUMPIXELS){
-//    distance_in_pixels = NUMPIXELS;
-//  } else if (distance_in_pixels <0){
-//    distance_in_pixels = 0;
-//  }
-//  
-//  newPixels = distance_in_pixels;
- 
-  
+ */  
