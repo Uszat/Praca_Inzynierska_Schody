@@ -135,6 +135,7 @@ void read_dual_sensors() {
   } else {
     //Serial.print(F("Out of range "));
     //Serial.print(measure2.RangeMilliMeter);
+    distance2 = 8000;
   }
 }
 
