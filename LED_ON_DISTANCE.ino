@@ -74,7 +74,7 @@ int distance_in_pixels = 0;
 int newPixels = 0;
 int prevPixels = 0;
 #define MINDIST 50.0
-#define MAXDIST 500.0
+#define MAXDIST 500.0 
 
 // this holds the measurement
 VL53L0X_RangingMeasurementData_t measure1;
