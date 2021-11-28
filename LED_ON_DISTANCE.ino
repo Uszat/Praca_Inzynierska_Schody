@@ -1,12 +1,13 @@
-//GENERAL IDEA
 bool ON_STAIRS;
 int peopleOnStairs;
 bool sensorTop;
 bool sensorBottom;
 bool enteredFromTop;
 bool enteredFromBottom;
+
 unsigned long currentTime;
 unsigned long timeMarker;
+
 uint8_t incomingData = 0;
 bool newData = false;
 char buf[7];
@@ -20,14 +21,29 @@ int newCounter = 0;
 int numColors = 255;
 bool rainbowSet = false;
 bool ledOn = false;
+float brightness = 0.5;
+
+enum animationState
+{
+  MOVING_IN_IN,
+  MOVING_IN_OUT,
+  FADE,
+  OUTSIDE_IN,
+  NO_ANIM,
+};
+
+enum animationState animation = FADE;
 
 void setAction();
 
 #define TIMEOUT 60000 //in ms so 60sec 
-#define MIN_SENSOR1_DISTANCE 900
-#define MIN_SENSOR2_DISTANCE 3000
+#define MIN_SENSOR1_DISTANCE 150//900
+#define MIN_SENSOR2_DISTANCE 150//3000
 #define WHITE 180, 0, 180
 #define RED   255, 0, 0
+#define DEFAULT 0
+#define BOTTOM  false
+#define TOP     true
 
 //BT ==========================
 #include "BluetoothSerial.h"
@@ -142,16 +158,16 @@ void read_dual_sensors() {
 void setup() {
 
   //GENERAL IDEA
-  ON_STAIRS = false;
-  peopleOnStairs = 0;
-  sensorTop = false;
-  sensorBottom = false;
-  enteredFromTop = false;
+  ON_STAIRS         = false;
+  peopleOnStairs    = 0;
+  sensorTop         = false;
+  sensorBottom      = false;
+  enteredFromTop    = false;
   enteredFromBottom = false;
   turnLedOff();
-  r = 180;
+  r = 255;
   g = 0;
-  b = 180;
+  b = 0;
 
   resetBuffers();
   
@@ -250,6 +266,48 @@ void turnLedOff()
     pixels.show();   // Send the updated pixel colors to the hardware.
 }
 
+void animationOn(bool top)
+{
+  switch (animation){
+    case MOVING_IN_IN: //default moving in-in
+      top ? turnLedOnTop() : turnLedOnBottom();
+      break;
+    case MOVING_IN_OUT: //moving in-out
+      top ? turnLedOnTop() : turnLedOnBottom();
+      break;
+    case FADE:
+      fadeIn();
+      break;
+    case OUTSIDE_IN:
+      // fadeIn();
+      break;
+    case NO_ANIM:
+      // fadeIn();
+      break;
+  }
+}
+
+void animationOff(bool top)
+{
+  switch (animation){
+    case MOVING_IN_IN: //default moving in-in
+      top ? turnLedOffTop() : turnLedOffBottom();
+      break;
+    case MOVING_IN_OUT: //default moving in-out
+      top ? turnLedOffBottom() : turnLedOffTop();
+      break;
+    case FADE:
+      fadeOut();
+      break;
+    case OUTSIDE_IN:
+      
+      break;
+    case NO_ANIM:
+      
+      break;
+  }
+}
+
 void checkSensors()
 {
   read_dual_sensors();
@@ -287,59 +345,114 @@ void receiveBTData(){
   }
 }
 
-bool arrayContains(char givenArray[], char givenString[]){
-    for(int j = 0; j<sizeof(givenString)/sizeof(givenString[0])-1; j++){
+bool arrayContains(char givenArray[], long x, char givenString[])
+{
+    for(int j = 0; j<sizeof(givenString)/sizeof(givenString[0])-2; j++){ //-2 cause when string is "br" its actually "br\n\t" or sth, theres empty space after r and then end of string 
       if(givenArray[j] != givenString[j]){
-        return false;
+         return false;
       }
     }
     return true;
 }
 
-void setAction() {
-  if(arrayContains(buf, "off"))
+void setAction() 
+{
+  if(arrayContains(buf, 0, "off"))
   {
     turnLedOff();
     resetState();
     ledOn = false;
   } 
-  else if (arrayContains(buf, "on"))
+  else if (arrayContains(buf, 0, "on"))
   {
     ledOn = true;
     if(!rainbowSet){
-      turnLedOn();
+      animationOn(DEFAULT);
     }
   } 
-  else if(arrayContains(buf, "auto"))
+  else if(arrayContains(buf, 0, "auto"))
   {
-    turnLedOffTop();
+    animationOff(DEFAULT);
     resetState();
     setter = 0;
   } 
-  else if(arrayContains(buf, "rbow"))
+  else if(arrayContains(buf, 0, "br"))
+  {
+    setLedBrightness();
+  } 
+  else if(arrayContains(buf, 0, "rbow"))
   {
     rainbowSet = true;
+  }
+  else if(arrayContains(buf, 0, "anim0"))
+  {
+    animation = MOVING_IN_IN;
+  }
+  else if(arrayContains(buf, 0, "anim1"))
+  {
+    animation = MOVING_IN_OUT;
+  }
+  else if(arrayContains(buf, 0, "anim2"))
+  {
+    animation = FADE;
   }
   else 
   {
     rainbowSet = false;
     setColor(); 
   }
+
   bufIndex = 0;  
   resetBuffers();
 }
 
-void setLedBrightness(){
-  int brightness;
-  for(int i = 2, j = 0; i<6; i++, j++){
+//extract hue from rgb, then create new rgb from the hue and new brightness
+void makeNewBrightness()
+{
+  float saturation = 1;
+  float _brightness = brightness;
+  float hue = RGBtoHUE(r,g,b);
+  long color; 
+  color = HSBtoRGB(hue, saturation, brightness);
+  r = color >> 16 & 255;
+  g = color >> 8 & 255;
+  b = color & 255;
+}
+
+//set the actual new brightness into a brightness variable, create new rgb and turn leds on
+void setLedBrightness()
+{
+  float br;
+  for(int i = 2, j = 0; i<4; i++, j++){
     tempBuf[j] = buf[i];
   }
-  brightness = (int)strtol(tempBuf, NULL, 10);
-  brightness += 1;
-  r = r - (r/brightness);
-  g = g - (g/brightness);
-  b = b - (b/brightness);
-  turnLedOn();
+  br = (float)strtol(tempBuf, NULL, 10);
+
+  brightness = br / 100.0;
+
+  Serial.println();
+  Serial.println("before ");
+  Serial.print("r: ");
+  Serial.println(r);
+  Serial.print("g: ");
+  Serial.println(g);
+  Serial.print("b: ");
+  Serial.println(b);
+
+  makeNewBrightness();
+
+  Serial.println("after ");
+  Serial.print("r: ");
+  Serial.println(r);
+  Serial.print("g: ");
+  Serial.println(g);
+  Serial.print("b: ");
+  Serial.println(b);
+  Serial.print("newBrightness: ");
+  Serial.println(brightness);
+  if(ledOn){
+    turnLedOn();
+  }
 }
 
 void setColor(){
@@ -434,31 +547,13 @@ long HSBtoRGB(float _hue, float _sat, float _brightness) {
 
 void rainbow(){
 
-  float colorNumber;
+  float colorNumber; 
   float saturation = 1; // Between 0 and 1 (0 = gray, 1 = full color)
   float brightness = 0.4; // Between 0 and 1 (0 = dark, 1 is full brightness)
-  float hue;
+  float hue; //later change it to int to check if calculations are quicker
   long color; 
   
   counter = newCounter;
-  
-  // colorNumber = counter > numColors ? counter - numColors: counter;
-  // hue = (colorNumber / float(numColors)) * 360; // Number between 0 and 360
-  // color = HSBtoRGB(hue, saturation, brightness); 
-
-  // Get the red, blue and green parts from generated color
-  // int red = color >> 16 & 255;
-  // int green = color >> 8 & 255;
-  // int blue = color & 255;
-
-  // r = red;
-  // g = green;
-  // b = blue;
-
- // Counter can never be greater then 2 times the number of available colors
-  // the colorNumber = line above takes care of counting backwards (nicely looping animation)
-  // when counter is larger then the number of available colors
-  // counter = (counter + 1) % (numColors * 2);
 
   for(int i=0; i<NUMPIXELS; i++) 
     {
@@ -470,17 +565,96 @@ void rainbow(){
       b = color & 255;
       pixels.setPixelColor(i, pixels.Color(r, g, b));
       counter = (counter + 1) % (numColors * 2);
-//      Serial.print("colorNumber ");
-//      Serial.println(colorNumber);
-//      Serial.print("counter ");
-//      Serial.println(counter);
     }
-    pixels.show();   // Send the updated pixel colors to the hardware.
-    //do rainbow dance
-    //on auto click rainbow = true 
-    //so when (rainbow) turnledonrainbow
-//    Serial.println();
-    newCounter = (newCounter+1) % 510;
+    pixels.show();
+    newCounter = (newCounter+1) % 510; //510 = 2 * 255
+}
+
+void fadeIn()
+{
+  float saturation = 1; // Between 0 and 1 (0 = gray, 1 = full color)
+  float _brightness; // = brightness; // Between 0 and 1 (0 = dark, 1 is full brightness)
+  float hue = RGBtoHUE(r,g,b); //extract hue from rgb values
+  long color; 
+  Serial.print("b4 loop brightness: ");
+  Serial.println(brightness);
+  for(float j = 0.0; j<brightness; j+=0.01) //go through brightness levels
+    {
+      _brightness = j;
+      Serial.print("_brightness: ");
+      Serial.println(_brightness);
+    for(int i=0; i<NUMPIXELS; i++) //go through specific pixels
+      {
+        color = HSBtoRGB(hue, saturation, brightness); //make same color with new brightness
+        r = color >> 16 & 255;
+        g = color >> 8 & 255;
+        b = color & 255;
+        pixels.setPixelColor(i, pixels.Color(r, g, b));
+      }
+        pixels.show();   // Send the updated pixel colors to the hardware
+    }
+}
+
+void fadeOut()
+{
+  float _saturation = 1; // Between 0 and 1 (0 = gray, 1 = full color)
+  float _brightness = brightness; // Between 0 and 1 (0 = dark, 1 is full brightness)
+  float _hue = RGBtoHUE(r,g,b);
+  long color; 
+  for(float j = brightness; j>=0; j-=0.01)
+    {
+      _brightness = j;
+    for(int i=0; i<NUMPIXELS; i++) 
+      {
+        color = HSBtoRGB(_hue, _saturation, _brightness);
+        r = color >> 16 & 255;
+        g = color >> 8 & 255;
+        b = color & 255;
+        pixels.setPixelColor(i, pixels.Color(r, g, b));
+      }
+        pixels.show();   // Send the updated pixel colors to the hardware
+    }
+}
+
+float RGBtoHUE(int rr, int gg, int bb)
+{
+  float tR, tG, tB;
+  float tMin, tMax;
+  float tHue;
+
+//make values into range 0-1
+  tR = rr / 255.0;
+  tG = gg / 255.0;
+  tB = bb / 255.0;
+
+//find min value from r,g,b
+  tMin = min(min(tR, tG), tB);
+
+//find max value from r,g,b
+  tMax = max(max(tR, tG), tB);
+  
+ if(tMax - tMin == 0){
+    return 0;
+  }
+
+//there are three cases with different formulas
+  if(tMax == tR){
+    tHue = (tG-tB)/(tMax-tMin);
+  }else if(tMax == tG){
+    tHue = 2.0 + (tB-tR)/(tMax-tMin);
+  }else{
+    tHue = 4.0 + (tR-tG)/(tMax-tMin);
+  }
+
+//make it 0-360
+  tHue *= 60;
+  
+//if less then zero make it positive
+  if(tHue < 0){
+    tHue+=360;
+  }
+
+  return tHue;
 }
 
 void manageSensorLED()
@@ -488,7 +662,7 @@ void manageSensorLED()
   if(sensorTop && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od gory
     {
       if(!rainbowSet){
-        turnLedOnTop();
+        animationOn(TOP);
       }
       ON_STAIRS = true;
       enteredFromTop = true;
@@ -510,7 +684,8 @@ void manageSensorLED()
     }
   else if(sensorBottom && ON_STAIRS && enteredFromTop && peopleOnStairs == 1) //jesli wyszedl z dolu, byl ktos na schodach, zaczal od gory i tylko 1 os byla na schodach to LED off
     {
-      turnLedOffTop();
+      animationOff(TOP);
+      // turnLedOffTop();
       ON_STAIRS = false;
       enteredFromTop = false;
       peopleOnStairs = 0;
@@ -521,7 +696,8 @@ void manageSensorLED()
    else if(sensorBottom && !ON_STAIRS) //wlacz LED jak nikogo nie ma na schodach i wchodzi zaczal od dolu
     {
       if(!rainbowSet){
-        turnLedOnBottom();
+        animationOn(BOTTOM);
+        // turnLedOnBottom();
       }
       ON_STAIRS = true;
       enteredFromBottom = true;
@@ -543,7 +719,8 @@ void manageSensorLED()
     }
   else if(sensorTop && ON_STAIRS && enteredFromBottom && peopleOnStairs == 1) //jesli wyszedl z gory, byl ktos na schodach, zaczal od dolu i tylko 1 os byla na schodach to LED off
     {
-      turnLedOffBottom();
+      // turnLedOffBottom();
+      animationOff(BOTTOM);
       ON_STAIRS = false;
       enteredFromBottom = false;
       peopleOnStairs = 0;
@@ -560,11 +737,11 @@ void manageSensorLED()
 
 void resetState()
 {
-  ON_STAIRS = false;
-  peopleOnStairs = 0;
-  sensorTop = false;
-  sensorBottom = false;
-  enteredFromTop = false;
+  ON_STAIRS         = false;
+  peopleOnStairs    = 0;
+  sensorTop         = false;
+  sensorBottom      = false;
+  enteredFromTop    = false;
   enteredFromBottom = false;
 }
 
@@ -577,29 +754,23 @@ void resetBuffers(){
   }
 }
 void loop() {
-//
-//  if (Serial.available()) {
-//    SerialBT.write(Serial.read());
-//  }
-
+  //Receive Bluetooth command
   receiveBTData();
-  
-  //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
-  if(setter == 0)
-  {
-    checkSensors();
-    manageSensorLED();
-    debugData(false);
-  }
-  if(rainbowSet && ledOn){
-    if(setter == 0 && ON_STAIRS){
-      rainbow(); 
-    }else if(setter == 1){
-      rainbow(); 
-    }
-  }
 
-  
+  //Zarzadzanie LED i iloscia osob zaczuynajac wchodzenie od gory
+   if(setter == 0)
+   {
+     checkSensors();
+     manageSensorLED();
+     debugData(false);
+   }
+   if(rainbowSet && ledOn){
+     if(setter == 0 && ON_STAIRS){
+       rainbow(); 
+     }else if(setter == 1){
+       rainbow(); 
+     }
+   }  
   delay(1);
 }
 
@@ -660,9 +831,12 @@ if(enteredFromTop)
 
 /*
  * 
- * Add changing colors, wybieranie kolor itp
- * Jak wchodzi pierwsza osoba to i tak policz nastepne osoby
- * Przyspiesz zapalanie swiatel
+ * 
  * dodaj indykator iloscai przez RED LED
  * 
+ * Przypisy
+ * https://forum.arduino.cc/t/color-changing-rgb-led-rainbow-spectrum/8561
+ * 
+ * https://stackoverflow.com/questions/47785905/converting-rgb-to-hsl-in-c
+ * http://www.niwa.nu/2013/05/math-behind-colorspace-conversions-rgb-hsl/
  */  
